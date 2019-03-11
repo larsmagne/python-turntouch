@@ -237,15 +237,12 @@ class TurnTouch(btle.Peripheral):
     def __init__(self,
                  address: Union[str, btle.ScanEntry],
                  handler: DefaultActionHandler = None,
-                 debounce: bool = True,
                  listen: bool = False,
                  interface: int = None):
         """Connect to the Turn Touch remote.
         Set appropriate address type (overriding btle default).
         :param address Union[str, btle.ScanEntry]:
             MAC address (or btle.ScanEntry object) of this device
-        :param debounce bool:
-            Suppress single presses during a hold, double-tap or multi-press.
         :param listen bool: Start listening for button presses
         :param interface int: Index of the bluetooth device (eg. 0 for hci0)"""
         try:
@@ -260,10 +257,10 @@ class TurnTouch(btle.Peripheral):
                                      .format(address=address))
         self.withDelegate(self.NotificationDelegate(turn_touch=self))
         self.handler = handler or DefaultActionHandler
-        self.debounce = debounce
         self._listening = False
         self._combo_action = set()
         self._lock = Lock()
+        self._pending_action = False
         if listen:
             self.listen_forever()
 
@@ -344,8 +341,7 @@ class TurnTouch(btle.Peripheral):
         self._pending_read = None
         self._read_value = None
         self._listening = True
-        if self.debounce:
-            self.executor = ThreadPoolExecutor(5)
+        self.executor = ThreadPoolExecutor(5)
         try:
             if only_one:
                 with self._lock:
@@ -396,6 +392,7 @@ class TurnTouch(btle.Peripheral):
                          "characteristic {uuid}"
                          .format(action="enabled" if enabled else "disabled",
                                  address=self.addr, uuid=uuid))
+            print("Listening")
         except btle.BTLEException:
             raise TurnTouchException("Failed to enable notifications for "
                                      "device {addr}, characteristic {uuid}"
@@ -408,58 +405,6 @@ class TurnTouch(btle.Peripheral):
         def __init__(self, turn_touch):
             """Retain a reference to the parent TurnTouch object."""
             self.turn_touch = turn_touch
-
-        def _handle_combo(self, action):
-            """Handle an action immediately.
-            This action may be the end of a complex press (double-tap or hold),
-            so we record that. See _handle_single for the other side."""
-            self.turn_touch._combo_action.add(action)
-            self.handle_action(action)
-            time.sleep(self.turn_touch.MAX_DELAY)
-            self.turn_touch._combo_action.remove(action)
-
-        def _handle_multi(self, action):
-            """Handle a multi-button action.
-            Occurs immediately, but we need to debounce because it can fire
-            more than once."""
-            for combo_action in self.turn_touch._combo_action:
-                if combo_action.buttons.issuperset(action.buttons):
-                    # This was already handled
-                    logger.debug("Debounce Multi: ignoring action {action}."
-                                 .format(action=action))
-                    return
-            # Not a duplicate; proceed
-            self.turn_touch._combo_action.add(action)
-            self.handle_action(action)
-            time.sleep(self.turn_touch.MAX_DELAY)
-            self.turn_touch._combo_action.remove(action)
-
-        def _handle_off(self, action):
-            """Handle the "Off' action
-            Occurs with a delay, and we need to debounce because it can fire
-            more than once."""
-            if action in self.turn_touch._combo_action:
-                logger.debug("Debounce Off: ignoring action {action}."
-                             .format(action=action))
-                return
-            # Not a duplicate; proceed
-            self.turn_touch._combo_action.add(action)
-            time.sleep(self.turn_touch.MAX_DELAY)
-            self.handle_action(action)
-            self.turn_touch._combo_action.remove(action)
-
-        def _handle_single(self, action):
-            """Handle an action which may be the beginning of a complex press
-            (double tap, or hold). Wait for further actions before handling."""
-            time.sleep(self.turn_touch.MAX_DELAY)
-            for combo_action in self.turn_touch._combo_action:
-                if combo_action.buttons.issuperset(action.buttons):
-                    # This button press was part of a combo; ignore it.
-                    logger.debug("Debounce: ignoring action {action}."
-                                 .format(action=action))
-                    return
-            # Apparently there was no combo, so handle the original action
-            self.handle_action(action)
 
         def handle_action(self, action):
             """Actually invoke the handlers for this action."""
@@ -476,23 +421,14 @@ class TurnTouch(btle.Peripheral):
             except IndexError:
                 raise TurnTouchException('Unknown action received: {}'
                                          .format(data))
-            if self.turn_touch.debounce:
-                if action.is_combo:
-                    self._handle_combo(action)
-                elif action.is_multi:
-                    logger.debug("Debounce: delaying {action}.".format(
-                        action=action))
-                    self.turn_touch.executor.submit(
-                        self._handle_multi, (action))
-                elif action.is_off:
-                    logger.debug("Debounce: delaying {action}.".format(
-                        action=action))
-                    self.turn_touch.executor.submit(
-                        self._handle_off, (action))
-                else:
-                    logger.debug("Debounce: delaying {action}.".format(
-                        action=action))
-                    self.turn_touch.executor.submit(
-                        self._handle_single, (action))
-            else:
+            print(action)
+
+            if action.is_combo:
+                self._pending_action = False
                 self.handle_action(action)
+            elif action.is_off:
+                if self._pending_action:
+                    self.handle_action(self._pending_action)
+                    self._pending_action = False
+            else:
+                self._pending_action = action
