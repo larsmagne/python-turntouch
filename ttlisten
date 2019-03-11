@@ -1,34 +1,52 @@
 #!/usr/bin/python3
 
-# This is an example program for this library.  Adjust the MAC address
-# at the end there.
+# This is an example program for this library.  Adjust the MAC
+# addresses and the actions.
+
+import sys
+from os.path import expanduser
+
+sys.path.append(expanduser("~") + "/src/python-turntouch")
 
 from turntouch import TurnTouch, DefaultActionHandler
+import subprocess
 
 class MyHandler(DefaultActionHandler):
     def action_north(self):
         print("Up button pressed.")
+        subprocess.call(["stereo", "(jukebox-increase-volume)"])
     def action_south(self):
         print("Down button pressed.")
+        subprocess.call(["stereo", "(jukebox-decrease-volume)"])
 
     def action_north_double_tap(self):
-        print("Up button double-tapped.")
+        print("Up double button pressed.")
+        subprocess.call(["stereo", "(jukebox-increase-volume)"])
     def action_south_double_tap(self):
-        print("Down button double-tapped.")
-        
+        print("Down double button pressed.")
+        subprocess.call(["stereo", "(jukebox-decrease-volume)"])
+
     def action_west(self):
         print("Left button pressed.")
+        subprocess.call(["stereo", "(jukebox-play-prev t)"])
     def action_east(self):
         print("Right button pressed.")
+        subprocess.call(["stereo", "(jukebox-play-next t)"])
 
-    def action_west_double_tap(self):
-        print("Left button double-tapped.")
-    def action_east_double_tap(self):
-        print("Right button double-tapped.")
-
+    def action_north_hold(self):
+        print("Down button held.")
+        subprocess.call(["stereo", "(jukebox-pause)"])
     def action_south_hold(self):
         print("Down button held.")
+        subprocess.call(["stereo", "(jukebox-pause)"])
 
+    def action_west_hold(self):
+        print("West button held.")
+        subprocess.call(["lights", "0"])
+    def action_east_hold(self):
+        print("East button held.")
+        subprocess.call(["lights", "1"])
+        
 
 tt = TurnTouch('e5:b6:51:8e:f4:50')
 tt.handler = MyHandler()
