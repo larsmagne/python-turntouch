@@ -1,0 +1,35 @@
+#!/usr/bin/python3
+
+# This is an example program for this library.  Adjust the MAC address
+# at the end there.
+
+from turntouch import TurnTouch, DefaultActionHandler
+
+class MyHandler(DefaultActionHandler):
+    def action_north(self):
+        print("Up button pressed.")
+    def action_south(self):
+        print("Down button pressed.")
+
+    def action_north_double_tap(self):
+        print("Up button double-tapped.")
+    def action_south_double_tap(self):
+        print("Down button double-tapped.")
+        
+    def action_west(self):
+        print("Left button pressed.")
+    def action_east(self):
+        print("Right button pressed.")
+
+    def action_west_double_tap(self):
+        print("Left button double-tapped.")
+    def action_east_double_tap(self):
+        print("Right button double-tapped.")
+
+    def action_south_hold(self):
+        print("Down button held.")
+
+
+tt = TurnTouch('e5:b6:51:8e:f4:50')
+tt.handler = MyHandler()
+tt.listen_forever()
