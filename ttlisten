@@ -34,7 +34,7 @@ class MyHandler(DefaultActionHandler):
         subprocess.call(["stereo", "(jukebox-play-next t)"])
 
     def action_north_hold(self):
-        print("Down button held.")
+        print("Up button held.")
         subprocess.call(["stereo", "(jukebox-pause)"])
     def action_south_hold(self):
         print("Down button held.")
